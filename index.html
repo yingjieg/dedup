@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重复文件清理 · fclones 上传 + rm 删除</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+        body {
+            background: #f4f6fa;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            padding: 28px 32px 40px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #0b1b2f;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .upload-area {
+            background: #f8faff;
+            border: 2px dashed #cdd9ed;
+            border-radius: 20px;
+            padding: 24px 28px;
+            margin-bottom: 28px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            transition: border-color 0.2s, background 0.1s;
+        }
+        .upload-area:hover {
+            border-color: #8aa4d0;
+            background: #f5f9ff;
+        }
+        .upload-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #1f2a3f;
+            color: white;
+            padding: 10px 24px;
+            border-radius: 60px;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .upload-label:hover {
+            background: #142033;
+        }
+        .upload-label input[type="file"] {
+            display: none;
+        }
+        .file-status {
+            color: #1f2a3a;
+            background: #eef3fc;
+            padding: 6px 20px;
+            border-radius: 40px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .file-status .clear-btn {
+            background: transparent;
+            border: none;
+            color: #8b2f2f;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 6px;
+            padding: 0 6px;
+        }
+        .file-status .clear-btn:hover {
+            color: #b11f1f;
+        }
+        .subhead {
+            color: #4a5b6e;
+            font-size: 15px;
+            border-bottom: 1px solid #e9edf4;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .stats {
+            background: #f0f3f9;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-size: 14px;
+            color: #1f2a3a;
+            font-weight: 500;
+        }
+        .file-group {
+            background: #ffffff;
+            border-radius: 18px;
+            border: 1px solid #eef2f8;
+            margin-bottom: 22px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+            transition: box-shadow 0.15s;
+        }
+        .file-group:hover {
+            box-shadow: 0 8px 18px rgba(0, 20, 40, 0.06);
+        }
+        .group-header {
+            background: #f9fbfe;
+            padding: 14px 22px;
+            border-radius: 18px 18px 0 0;
+            border-bottom: 1px solid #eef2f8;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .hash-info {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+        .hash {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 15px;
+            font-weight: 500;
+            color: #1f2a3a;
+            background: #eef3fc;
+            padding: 4px 14px;
+            border-radius: 40px;
+            letter-spacing: 0.3px;
+        }
+        .file-count {
+            background: #d5deec;
+            padding: 3px 14px;
+            border-radius: 40px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1d2b3f;
+        }
+        .size-badge {
+            color: #2d4057;
+            font-size: 14px;
+            background: #eef2f8;
+            padding: 2px 14px;
+            border-radius: 30px;
+        }
+        .group-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .select-all-btn, .group-delete-btn {
+            background: transparent;
+            border: 1px solid #cbd5e1;
+            border-radius: 30px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1f2a3a;
+            cursor: pointer;
+            transition: 0.1s;
+            background: white;
+        }
+        .select-all-btn:hover {
+            background: #eef3fc;
+            border-color: #a0b8d4;
+        }
+        .group-delete-btn {
+            background: #fee8e8;
+            border-color: #f5c6c6;
+            color: #a03838;
+        }
+        .group-delete-btn:hover {
+            background: #fdd5d5;
+            border-color: #e8a0a0;
+        }
+        .group-delete-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .file-list {
+            padding: 6px 8px 8px 18px;
+            list-style: none;
+            margin: 0;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px 10px 6px;
+            border-bottom: 1px solid #f0f4fc;
+            gap: 12px;
+            transition: background 0.08s;
+            border-radius: 10px;
+        }
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        .file-item:hover {
+            background: #f8faff;
+        }
+        .file-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 4px;
+            flex-shrink: 0;
+            accent-color: #2563eb;
+            cursor: pointer;
+        }
+        .file-path {
+            font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+            font-size: 14px;
+            color: #1b2a41;
+            word-break: break-all;
+            line-height: 1.5;
+            padding: 2px 0;
+            flex: 1;
+        }
+        .delete-bar {
+            margin-top: 32px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 18px;
+            border-top: 1px solid #e9edf4;
+            padding-top: 28px;
+            flex-wrap: wrap;
+        }
+        .selected-info {
+            font-size: 15px;
+            color: #1f2a3a;
+            background: #f0f5ff;
+            padding: 5px 18px;
+            border-radius: 40px;
+            font-weight: 500;
+        }
+        .btn-delete {
+            background: #d92b2b;
+            border: none;
+            border-radius: 60px;
+            padding: 12px 36px;
+            font-weight: 600;
+            font-size: 16px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.05s;
+            box-shadow: 0 4px 10px rgba(200, 30, 30, 0.15);
+            letter-spacing: 0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-delete:hover {
+            background: #b31f1f;
+        }
+        .btn-delete:active {
+            transform: scale(0.96);
+        }
+        .btn-delete:disabled {
+            opacity: 0.5;
+            pointer-events: none;
+            filter: grayscale(0.4);
+        }
+        .empty-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #5f738d;
+            background: #fafcff;
+            border-radius: 30px;
+            font-size: 16px;
+        }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0b1f33;
+            color: #edf2f9;
+            padding: 14px 30px;
+            border-radius: 60px;
+            font-weight: 500;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+            font-size: 15px;
+            opacity: 0;
+            transition: opacity 0.25s;
+            pointer-events: none;
+            z-index: 999;
+            white-space: nowrap;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .inline-code {
+            background: #eef3fc;
+            padding: 2px 10px;
+            border-radius: 30px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        @media (max-width: 700px) {
+            .container { padding: 16px; }
+            .group-header { flex-direction: column; align-items: stretch; }
+            .hash-info { flex-wrap: wrap; }
+            .file-item { flex-wrap: wrap; }
+            .file-path { font-size: 13px; }
+            .upload-area { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <h1>🧩 重复文件清理 · 上传 fclones 结果</h1>
+
+        <!-- 上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <div>
+                <label class="upload-label" id="uploadLabel">
+                    📤 选择 fclones 结果文件
+                    <input type="file" id="fileInput" accept=".txt,.log,.json,.csv,.tsv,.text,text/plain">
+                </label>
+                <span style="margin-left: 12px; font-size: 14px; color: #3b4d66;">或拖拽文件到此处</span>
+            </div>
+            <div class="file-status" id="fileStatus">
+                <span id="fileNameDisplay">未上传</span>
+                <button class="clear-btn" id="clearFileBtn" title="清空数据">✕</button>
+            </div>
+        </div>
+
+        <div class="subhead">
+            <span>基于 fclones 输出 · 勾选需要删除的重复副本 · 执行 <span class="inline-code">rm</span> 删除</span>
+            <span class="stats" id="statsDisplay">0 个文件组 · 0 个文件</span>
+        </div>
+
+        <!-- 动态渲染文件组 -->
+        <div id="fileGroupsContainer"><div class="empty-message">📂 请上传 fclones 结果文件</div></div>
+
+        <!-- 底部操作栏 -->
+        <div class="delete-bar">
+            <span class="selected-info" id="selectedCount">☐ 已选 0 个文件</span>
+            <button class="btn-delete" id="deleteBtn" disabled>🗑️ 执行 rm 删除</button>
+        </div>
+    </div>
+
+    <!-- 轻提示 -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        (function() {
+            // ----- DOM 引用 -----
+            const fileInput = document.getElementById('fileInput');
+            const clearFileBtn = document.getElementById('clearFileBtn');
+            const fileNameDisplay = document.getElementById('fileNameDisplay');
+            const container = document.getElementById('fileGroupsContainer');
+            const statsDisplay = document.getElementById('statsDisplay');
+            const selectedCountSpan = document.getElementById('selectedCount');
+            const deleteBtn = document.getElementById('deleteBtn');
+            const toast = document.getElementById('toast');
+            const uploadArea = document.getElementById('uploadArea');
+
+            // ----- 状态 -----
+            let groups = [];                     // 当前文件组 [{ hash, size, paths }]
+            const checkedState = new Map();      // path -> boolean
+
+            // ----- 工具: 解析 fclones 文本 -----
+            function parseFclonesText(text) {
+                const lines = text.split(/\r?\n/);
+                const resultGroups = [];
+                let currentHash = null;
+                let currentSize = null;
+                let currentPaths = [];
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
+
+                    // 匹配行: "hash, size * count:"  例如 "93d65bf... , 15292278 B (15.3 MB) * 9:"
+                    const headerMatch = line.match(/^([a-fA-F0-9]+),\s*(.+?)\s*\*\s*(\d+):/);
+                    if (headerMatch) {
+                        // 保存之前的组
+                        if (currentHash && currentPaths.length > 0) {
+                            resultGroups.push({
+                                hash: currentHash,
+                                size: currentSize || 'unknown',
+                                paths: [...currentPaths]
+                            });
+                        }
+                        currentHash = headerMatch[1].trim();
+                        currentSize = headerMatch[2].trim();
+                        currentPaths = [];
+                        continue;
+                    }
+
+                    // 匹配路径行 (以 / 或 . 开头，或者包含路径特征)
+                    if (currentHash && (line.startsWith('/') || line.startsWith('.') || line.includes('/'))) {
+                        // 移除可能的前导空格和缩进
+                        const path = line.replace(/^[\s]*/, '');
+                        if (path.length > 0) {
+                            currentPaths.push(path);
+                        }
+                        continue;
+                    }
+
+                    // 如果行以 "-" 或 "* " 开头但不符合上述, 尝试提取路径
+                    if (currentHash && (line.startsWith('-') || line.startsWith('*'))) {
+                        const path = line.replace(/^[\s\-\*]+/, '').trim();
+                        if (path && (path.startsWith('/') || path.startsWith('.') || path.includes('/'))) {
+                            currentPaths.push(path);
+                        }
+                    }
+                }
+
+                // 保存最后一组
+                if (currentHash && currentPaths.length > 0) {
+                    resultGroups.push({
+                        hash: currentHash,
+                        size: currentSize || 'unknown',
+                        paths: [...currentPaths]
+                    });
+                }
+
+                // 过滤掉paths为空的组
+                return resultGroups.filter(g => g.paths.length > 0);
+            }
+
+            // ----- 加载数据 -----
+            function loadDataFromText(text) {
+                const parsed = parseFclonesText(text);
+                if (parsed.length === 0) {
+                    showToast('⚠️ 未能解析出有效文件组，请检查格式');
+                    return false;
+                }
+                groups = parsed;
+                // 重置选中状态
+                checkedState.clear();
+                groups.forEach(g => {
+                    g.paths.forEach(p => checkedState.set(p, false));
+                });
+                render();
+                showToast(`✅ 成功解析 ${groups.length} 个文件组，共 ${groups.reduce((acc, g) => acc + g.paths.length, 0)} 个文件`);
+                return true;
+            }
+
+            // ----- 渲染 -----
+            function render() {
+                if (!groups || groups.length === 0) {
+                    container.innerHTML = `<div class="empty-message">📂 暂无重复文件数据，请上传 fclones 结果</div>`;
+                    updateStatsAndUI();
+                    return;
+                }
+
+                let html = '';
+                let totalFiles = 0;
+
+                groups.forEach((group, groupIndex) => {
+                    const pathCount = group.paths.length;
+                    totalFiles += pathCount;
+
+                    // 检查该组是否有选中的文件
+                    const hasChecked = group.paths.some(p => checkedState.get(p) === true);
+
+                    html += `<div class="file-group" data-group-index="${groupIndex}">`;
+                    html += `<div class="group-header">`;
+                    html += `<div class="hash-info">`;
+                    html += `<span class="hash">${group.hash}</span>`;
+                    html += `<span class="file-count">📄 ${pathCount} 个副本</span>`;
+                    html += `<span class="size-badge">${group.size || 'unknown'}</span>`;
+                    html += `</div>`;
+                    html += `<div class="group-actions">`;
+                    html += `<button class="select-all-btn" data-group-index="${groupIndex}" data-action="selectAll">全选</button>`;
+                    html += `<button class="group-delete-btn" data-group-index="${groupIndex}" data-action="groupDelete" ${!hasChecked ? 'disabled' : ''}>删除选中</button>`;
+                    html += `</div>`;
+                    html += `</div>`;
+
+                    html += `<ul class="file-list">`;
+                    group.paths.forEach((path) => {
+                        const isChecked = checkedState.get(path) || false;
+                        html += `<li class="file-item">`;
+                        html += `<input type="checkbox" class="file-checkbox" data-path="${encodeURIComponent(path)}" ${isChecked ? 'checked' : ''} />`;
+                        html += `<span class="file-path">${escapeHtml(path)}</span>`;
+                        html += `</li>`;
+                    });
+                    html += `</ul>`;
+                    html += `</div>`;
+                });
+
+                container.innerHTML = html;
+
+                // 更新统计
+                updateStatsAndUI(totalFiles);
+
+                // ----- 事件绑定 (委托) -----
+                // checkbox 变化
+                container.querySelectorAll('.file-checkbox').forEach(cb => {
+                    cb.addEventListener('change', function(e) {
+                        const rawPath = decodeURIComponent(this.dataset.path);
+                        checkedState.set(rawPath, this.checked);
+                        updateStatsAndUI();
+                        // 更新对应组的删除按钮状态
+                        updateGroupDeleteButtons();
+                        e.stopPropagation();
+                    });
+                });
+
+                // 全选按钮
+                container.querySelectorAll('.select-all-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        const groupIndex = parseInt(this.dataset.groupIndex, 10);
+                        const group = groups[groupIndex];
+                        if (!group) return;
+
+                        const allChecked = group.paths.every(p => checkedState.get(p) === true);
+                        const newValue = !allChecked;
+
+                        group.paths.forEach(p => {
+                            checkedState.set(p, newValue);
+                        });
+
+                        const groupContainer = document.querySelector(`.file-group[data-group-index="${groupIndex}"]`);
+                        if (groupContainer) {
+                            const checkboxes = groupContainer.querySelectorAll('.file-checkbox');
+                            checkboxes.forEach(cb => {
+                                cb.checked = newValue;
+                            });
+                        }
+                        updateStatsAndUI();
+                        updateGroupDeleteButtons();
+                        e.stopPropagation();
+                    });
+                });
+
+                // 组删除按钮
+                container.querySelectorAll('.group-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        const groupIndex = parseInt(this.dataset.groupIndex, 10);
+                        const group = groups[groupIndex];
+                        if (!group) return;
+
+                        // 获取该组选中的路径
+                        const selectedPaths = group.paths.filter(p => checkedState.get(p) === true);
+                        if (selectedPaths.length === 0) {
+                            showToast('该组没有选中任何文件');
+                            return;
+                        }
+
+                        // 确认删除
+                        if (confirm(`确定要删除该组选中的 ${selectedPaths.length} 个文件吗？`)) {
+                            executeDelete(selectedPaths);
+                        }
+                    });
+                });
+            }
+
+            // ----- 更新组删除按钮状态 -----
+            function updateGroupDeleteButtons() {
+                document.querySelectorAll('.group-delete-btn').forEach(btn => {
+                    const groupIndex = parseInt(btn.dataset.groupIndex, 10);
+                    const group = groups[groupIndex];
+                    if (group) {
+                        const hasChecked = group.paths.some(p => checkedState.get(p) === true);
+                        btn.disabled = !hasChecked;
+                    }
+                });
+            }
+
+            // ----- 更新统计 & 按钮 -----
+            function updateStatsAndUI(totalFilesParam) {
+                let checkedCount = 0;
+                for (let [_, val] of checkedState) {
+                    if (val) checkedCount++;
+                }
+
+                let totalFiles = 0;
+                groups.forEach(g => totalFiles += g.paths.length);
+
+                statsDisplay.textContent = `${groups.length} 个文件组 · ${totalFiles} 个文件`;
+                selectedCountSpan.textContent = `☑ 已选 ${checkedCount} 个文件`;
+                deleteBtn.disabled = (checkedCount === 0);
+            }
+
+            // ----- 执行删除 (调用后端API) -----
+            function executeDelete(filePaths) {
+                if (!filePaths || filePaths.length === 0) {
+                    showToast('没有文件需要删除');
+                    return;
+                }
+
+                showToast(`⏳ 正在删除 ${filePaths.length} 个文件...`);
+
+                const payload = { files: filePaths };
+
+                fetch('/api/delete-files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`服务器响应错误: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        showToast(`✅ 成功删除 ${data.deletedCount || filePaths.length} 个文件`);
+                        // 从数据中移除已删除的文件
+                        removeDeletedPaths(filePaths);
+                        render();
+                    } else {
+                        showToast(`❌ 删除失败: ${data.message || '未知错误'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('删除请求失败:', err);
+                    // 如果是本地测试，模拟删除成功
+                    if (err.message.includes('Failed to fetch')) {
+                        showToast(`⚠️ 后端服务未启动，模拟删除 ${filePaths.length} 个文件`);
+                        removeDeletedPaths(filePaths);
+                        render();
+                    } else {
+                        showToast(`❌ 请求失败: ${err.message}`);
+                    }
+                });
+            }
+
+            // ----- 执行 rm 删除 (底部按钮) -----
+            function executeRmDelete() {
+                const selectedPaths = [];
+                for (let [path, checked] of checkedState) {
+                    if (checked) selectedPaths.push(path);
+                }
+
+                if (selectedPaths.length === 0) {
+                    showToast('没有选中任何文件');
+                    return;
+                }
+
+                if (confirm(`确定要删除选中的 ${selectedPaths.length} 个文件吗？`)) {
+                    executeDelete(selectedPaths);
+                }
+            }
+
+            // 从 groups 和 checkedState 中移除已删除路径
+            function removeDeletedPaths(deletedPaths) {
+                const deletedSet = new Set(deletedPaths);
+                for (let i = groups.length - 1; i >= 0; i--) {
+                    const group = groups[i];
+                    group.paths = group.paths.filter(p => {
+                        if (deletedSet.has(p)) {
+                            checkedState.delete(p);
+                            return false;
+                        }
+                        return true;
+                    });
+                    if (group.paths.length === 0) {
+                        groups.splice(i, 1);
+                    }
+                }
+            }
+
+            // ----- 工具函数 -----
+            function escapeHtml(unsafe) {
+                return unsafe.replace(/[&<>"]/g, function(m) {
+                    if (m === '&') return '&amp;';
+                    if (m === '<') return '&lt;';
+                    if (m === '>') return '&gt;';
+                    if (m === '"') return '&quot;';
+                    return m;
+                });
+            }
+
+            let toastTimer = null;
+            function showToast(msg) {
+                toast.textContent = msg;
+                toast.classList.add('show');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3200);
+            }
+
+            // ----- 上传处理 -----
+            function handleFile(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    const success = loadDataFromText(text);
+                    if (success) {
+                        fileNameDisplay.textContent = file.name;
+                    } else {
+                        fileNameDisplay.textContent = '解析失败';
+                    }
+                };
+                reader.onerror = function() {
+                    showToast('读取文件失败');
+                };
+                reader.readAsText(file);
+            }
+
+            // ----- 清空数据 -----
+            function clearData() {
+                groups = [];
+                checkedState.clear();
+                fileNameDisplay.textContent = '未上传';
+                render();
+                showToast('已清空数据');
+            }
+
+            // ----- 事件绑定 -----
+            fileInput.addEventListener('change', function(e) {
+                if (this.files && this.files.length > 0) {
+                    handleFile(this.files[0]);
+                }
+                this.value = ''; // 允许重新选择同一文件
+            });
+
+            clearFileBtn.addEventListener('click', clearData);
+
+            // 拖拽上传
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#2563eb';
+                this.style.background = '#f0f6ff';
+            });
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#cdd9ed';
+                this.style.background = '#f8faff';
+            });
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#cdd9ed';
+                this.style.background = '#f8faff';
+                const files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
+
+            // 删除按钮
+            deleteBtn.addEventListener('click', executeRmDelete);
+
+            // ----- 初始化 (空状态) -----
+            render();
+
+            console.log('💡 删除请求将发送到 /api/delete-files');
+            console.log('💡 每个文件组都有独立的删除按钮');
+
+        })();
+    </script>
+</body>
+</html>

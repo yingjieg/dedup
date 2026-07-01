@@ -1,0 +1,12 @@
+{
+  "name": "duplicate-file-cleaner",
+  "version": "1.0.0",
+  "description": "重复文件清理工具，支持 fclones 结果上传和 rm 删除",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,37 @@
+# Report by fclones 0.35.0
+# Timestamp: 2026-07-01 00:15:51.823 +0800
+# Command: fclones group .
+# Base dir: /backup
+# Total: 905925555606 B (905.9 GB) in 222206 files in 47669 groups
+# Redundant: 730569365219 B (730.6 GB) in 174537 files
+# Missing: 0 B (0 B) in 0 files
+c2c82b1ca0a2e0600667b79b0028aac2, 3252723099 B (3.3 GB) * 3:
+    /backup/move/pics/105___09.rar
+    /backup/photos/整理/move/pics/105___09.rar
+    /backup/wd/archive/photos/整理/move/pics/105___09.rar
+018d658213700a64c4a578d98c778cf4, 2950651006 B (3.0 GB) * 2:
+    /backup/photos/N8的记忆201106_201208.zip
+    /backup/wd/archive/photos/N8的记忆201106_201208.zip
+45afda8edf8d0233fda33091789cc559, 1893335040 B (1.9 GB) * 3:
+    /backup/photos/backup/share_photo/131213 EI FUN DAY/00095.MTS
+    /backup/wd/archive/photos/backup/share_photo/131213 EI FUN DAY/00095.MTS
+    /backup/wd/Photos Library.photoslibrary/Masters/2016/10/30/20161030-040605/00095.MTS
+290a0b404797490ed01a360afc0f56db, 1580941752 B (1.6 GB) * 4:
+    /backup/move/pics/105___09/MVI_0655.MOV
+    /backup/photos/整理/move/pics/105___09/MVI_0655.MOV
+    /backup/wd/Photos Library.photoslibrary/Masters/2016/10/29/20161029-163317/MVI_0655.MOV
+    /backup/wd/archive/photos/整理/move/pics/105___09/MVI_0655.MOV
+5533d81083ba1a23467b25b058495554, 1032094528 B (1032.1 MB) * 2:
+    /backup/photos/整理/kuaipan/lumia/lumial.zip
+    /backup/wd/archive/photos/整理/kuaipan/lumia/lumial.zip
+6d815e38b4c373ae3030b5d93878ec54, 883500911 B (883.5 MB) * 4:
+    /backup/move/pics/2014-01-14/255.mp4
+    /backup/photos/整理/move/pics/2014-01-14/255.mp4
+    /backup/wd/Photos Library.photoslibrary/Masters/2016/10/29/20161029-163317/255.mp4
+    /backup/wd/archive/photos/整理/move/pics/2014-01-14/255.mp4
+a8ea761be6aaf4f50701e839f687e72c, 883500779 B (883.5 MB) * 5:
+    /backup/photos/Camera Roll/WP_20131116_16_41_35_Pro.mp4
+    /backup/photos/windows_phone/本机照片/WP_20131116_16_41_35_Pro.mp4
+    /backup/wd/archive/photos/Camera Roll/WP_20131116_16_41_35_Pro.mp4
+    /backup/wd/archive/photos/windows_phone/本机照片/WP_20131116_16_41_35_Pro.mp4
+    /backup/wd/Photos Library.photoslibrary/Masters/2016/10/29/20161029-185235/WP_20131116_16_41_35_Pro.mp4

@@ -240,14 +240,21 @@
             flex: 1;
         }
         .delete-bar {
+            position: sticky;
+            bottom: 0;
+            z-index: 50;
             margin-top: 32px;
             display: flex;
             justify-content: flex-end;
             align-items: center;
             gap: 18px;
             border-top: 1px solid #e9edf4;
-            padding-top: 28px;
+            padding: 18px 4px;
             flex-wrap: wrap;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(6px);
+            box-shadow: 0 -6px 20px rgba(11, 27, 51, 0.06);
+            border-radius: 0 0 24px 24px;
         }
         .selected-info {
             font-size: 15px;
@@ -382,7 +389,9 @@
 
             // ----- 状态 -----
             let groups = [];                     // 当前文件组 [{ hash, size, paths }]
-            const checkedState = new Map();      // path -> boolean
+            const checkedSet = new Set();        // 已选中的路径集合（size 即选中数，O(1)）
+            let totalFiles = 0;                  // 缓存的文件总数，仅在 groups 变化时更新
+            let io = null;                        // 虚拟滚动用的 IntersectionObserver
 
             // ----- 工具: 解析 fclones 文本 -----
             function parseFclonesText(text) {
@@ -453,148 +462,163 @@
                     return false;
                 }
                 groups = parsed;
-                // 重置选中状态
-                checkedState.clear();
-                groups.forEach(g => {
-                    g.paths.forEach(p => checkedState.set(p, false));
-                });
+                // 重置选中状态（Set 空即全部未选，无需预填 22 万条）
+                checkedSet.clear();
+                totalFiles = groups.reduce((acc, g) => acc + g.paths.length, 0);
                 render();
-                showToast(`✅ 成功解析 ${groups.length} 个文件组，共 ${groups.reduce((acc, g) => acc + g.paths.length, 0)} 个文件`);
+                showToast(`✅ 成功解析 ${groups.length} 个文件组，共 ${totalFiles} 个文件`);
                 return true;
             }
 
             // ----- 渲染 -----
+            // 虚拟滚动：只为每个组创建一个空的占位卡片（带估算高度），
+            // 真正的内容（表头 + 文件列表）在滚动进入视口附近时才挂载，
+            // 离开视口后卸载，避免一次性生成数十万 DOM 节点。
+
+            // 估算某个组渲染后的高度（border-box），用于占位，减少滚动跳动
+            function estimateGroupHeight(group) {
+                return 70 + group.paths.length * 41;
+            }
+
+            // 生成一个组的内部 HTML（不含外层 .file-group 容器）
+            function buildGroupInner(group, groupIndex) {
+                const pathCount = group.paths.length;
+                const hasChecked = group.paths.some(p => checkedSet.has(p));
+
+                let html = '';
+                html += `<div class="group-header">`;
+                html += `<div class="hash-info">`;
+                html += `<span class="hash">${group.hash}</span>`;
+                html += `<span class="file-count">📄 ${pathCount} 个副本</span>`;
+                html += `<span class="size-badge">${group.size || 'unknown'}</span>`;
+                html += `</div>`;
+                html += `<div class="group-actions">`;
+                html += `<button class="select-all-btn" data-group-index="${groupIndex}" data-action="selectAll">全选</button>`;
+                html += `<button class="group-delete-btn" data-group-index="${groupIndex}" data-action="groupDelete" ${!hasChecked ? 'disabled' : ''}>删除选中</button>`;
+                html += `</div>`;
+                html += `</div>`;
+
+                html += `<ul class="file-list">`;
+                group.paths.forEach((path) => {
+                    html += `<li class="file-item">`;
+                    html += `<input type="checkbox" class="file-checkbox" data-path="${encodeURIComponent(path)}" ${checkedSet.has(path) ? 'checked' : ''} />`;
+                    html += `<span class="file-path">${escapeHtml(path)}</span>`;
+                    html += `</li>`;
+                });
+                html += `</ul>`;
+                return html;
+            }
+
+            function mountGroup(el) {
+                if (el.dataset.mounted) return;
+                const i = parseInt(el.dataset.groupIndex, 10);
+                el.innerHTML = buildGroupInner(groups[i], i);
+                el.dataset.mounted = '1';
+                el.style.minHeight = '';   // 让真实内容决定高度
+            }
+
+            function unmountGroup(el) {
+                if (!el.dataset.mounted) return;
+                // 卸载前锁定当前高度，保证滚动条位置稳定
+                el.style.minHeight = el.offsetHeight + 'px';
+                el.innerHTML = '';
+                delete el.dataset.mounted;
+            }
+
+            function onIntersect(entries) {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) mountGroup(entry.target);
+                    else unmountGroup(entry.target);
+                });
+            }
+
             function render() {
+                if (io) { io.disconnect(); io = null; }
+
                 if (!groups || groups.length === 0) {
                     container.innerHTML = `<div class="empty-message">📂 暂无重复文件数据，请上传 fclones 结果</div>`;
                     updateStatsAndUI();
                     return;
                 }
 
-                let html = '';
-                let totalFiles = 0;
-
+                // 只创建占位卡片，内容延迟挂载
+                const frag = document.createDocumentFragment();
                 groups.forEach((group, groupIndex) => {
-                    const pathCount = group.paths.length;
-                    totalFiles += pathCount;
-
-                    // 检查该组是否有选中的文件
-                    const hasChecked = group.paths.some(p => checkedState.get(p) === true);
-
-                    html += `<div class="file-group" data-group-index="${groupIndex}">`;
-                    html += `<div class="group-header">`;
-                    html += `<div class="hash-info">`;
-                    html += `<span class="hash">${group.hash}</span>`;
-                    html += `<span class="file-count">📄 ${pathCount} 个副本</span>`;
-                    html += `<span class="size-badge">${group.size || 'unknown'}</span>`;
-                    html += `</div>`;
-                    html += `<div class="group-actions">`;
-                    html += `<button class="select-all-btn" data-group-index="${groupIndex}" data-action="selectAll">全选</button>`;
-                    html += `<button class="group-delete-btn" data-group-index="${groupIndex}" data-action="groupDelete" ${!hasChecked ? 'disabled' : ''}>删除选中</button>`;
-                    html += `</div>`;
-                    html += `</div>`;
-
-                    html += `<ul class="file-list">`;
-                    group.paths.forEach((path) => {
-                        const isChecked = checkedState.get(path) || false;
-                        html += `<li class="file-item">`;
-                        html += `<input type="checkbox" class="file-checkbox" data-path="${encodeURIComponent(path)}" ${isChecked ? 'checked' : ''} />`;
-                        html += `<span class="file-path">${escapeHtml(path)}</span>`;
-                        html += `</li>`;
-                    });
-                    html += `</ul>`;
-                    html += `</div>`;
+                    const el = document.createElement('div');
+                    el.className = 'file-group';
+                    el.dataset.groupIndex = groupIndex;
+                    el.style.minHeight = estimateGroupHeight(group) + 'px';
+                    frag.appendChild(el);
                 });
+                container.innerHTML = '';
+                container.appendChild(frag);
 
-                container.innerHTML = html;
+                // 视口上下各预留 600px 提前挂载，滚动更顺滑
+                io = new IntersectionObserver(onIntersect, { rootMargin: '600px 0px' });
+                container.querySelectorAll('.file-group').forEach(el => io.observe(el));
 
-                // 更新统计
-                updateStatsAndUI(totalFiles);
+                updateStatsAndUI();
+            }
 
-                // ----- 事件绑定 (委托) -----
+            // ----- 事件委托 (绑定一次，render 重建 DOM 后无需重新绑定) -----
+            function bindContainerEvents() {
                 // checkbox 变化
-                container.querySelectorAll('.file-checkbox').forEach(cb => {
-                    cb.addEventListener('change', function(e) {
-                        const rawPath = decodeURIComponent(this.dataset.path);
-                        checkedState.set(rawPath, this.checked);
-                        updateStatsAndUI();
-                        // 更新对应组的删除按钮状态
-                        updateGroupDeleteButtons();
-                        e.stopPropagation();
-                    });
+                container.addEventListener('change', function(e) {
+                    const cb = e.target;
+                    if (!cb.classList.contains('file-checkbox')) return;
+                    const rawPath = decodeURIComponent(cb.dataset.path);
+                    if (cb.checked) checkedSet.add(rawPath);
+                    else checkedSet.delete(rawPath);
+                    updateStatsAndUI();
+                    updateGroupDeleteButtons();
                 });
 
-                // 全选按钮
-                container.querySelectorAll('.select-all-btn').forEach(btn => {
-                    btn.addEventListener('click', function(e) {
-                        const groupIndex = parseInt(this.dataset.groupIndex, 10);
-                        const group = groups[groupIndex];
-                        if (!group) return;
+                // 全选 / 组删除按钮
+                container.addEventListener('click', function(e) {
+                    const btn = e.target.closest('.select-all-btn, .group-delete-btn');
+                    if (!btn) return;
+                    const group = groups[parseInt(btn.dataset.groupIndex, 10)];
+                    if (!group) return;
 
-                        const allChecked = group.paths.every(p => checkedState.get(p) === true);
-                        const newValue = !allChecked;
-
+                    if (btn.dataset.action === 'selectAll') {
+                        const newValue = !group.paths.every(p => checkedSet.has(p));
                         group.paths.forEach(p => {
-                            checkedState.set(p, newValue);
+                            if (newValue) checkedSet.add(p);
+                            else checkedSet.delete(p);
                         });
-
-                        const groupContainer = document.querySelector(`.file-group[data-group-index="${groupIndex}"]`);
-                        if (groupContainer) {
-                            const checkboxes = groupContainer.querySelectorAll('.file-checkbox');
-                            checkboxes.forEach(cb => {
-                                cb.checked = newValue;
-                            });
-                        }
+                        btn.closest('.file-group')
+                           .querySelectorAll('.file-checkbox')
+                           .forEach(cb => { cb.checked = newValue; });
                         updateStatsAndUI();
                         updateGroupDeleteButtons();
-                        e.stopPropagation();
-                    });
-                });
-
-                // 组删除按钮
-                container.querySelectorAll('.group-delete-btn').forEach(btn => {
-                    btn.addEventListener('click', function(e) {
-                        const groupIndex = parseInt(this.dataset.groupIndex, 10);
-                        const group = groups[groupIndex];
-                        if (!group) return;
-
-                        // 获取该组选中的路径
-                        const selectedPaths = group.paths.filter(p => checkedState.get(p) === true);
+                    } else { // groupDelete
+                        const selectedPaths = group.paths.filter(p => checkedSet.has(p));
                         if (selectedPaths.length === 0) {
                             showToast('该组没有选中任何文件');
                             return;
                         }
-
-                        // 确认删除
-                        if (confirm(`确定要删除该组选中的 ${selectedPaths.length} 个文件吗？`)) {
+                        if (confirmDelete(selectedPaths.length)) {
                             executeDelete(selectedPaths);
                         }
-                    });
+                    }
                 });
             }
 
             // ----- 更新组删除按钮状态 -----
             function updateGroupDeleteButtons() {
-                document.querySelectorAll('.group-delete-btn').forEach(btn => {
+                container.querySelectorAll('.group-delete-btn').forEach(btn => {
                     const groupIndex = parseInt(btn.dataset.groupIndex, 10);
                     const group = groups[groupIndex];
                     if (group) {
-                        const hasChecked = group.paths.some(p => checkedState.get(p) === true);
+                        const hasChecked = group.paths.some(p => checkedSet.has(p));
                         btn.disabled = !hasChecked;
                     }
                 });
             }
 
             // ----- 更新统计 & 按钮 -----
-            function updateStatsAndUI(totalFilesParam) {
-                let checkedCount = 0;
-                for (let [_, val] of checkedState) {
-                    if (val) checkedCount++;
-                }
-
-                let totalFiles = 0;
-                groups.forEach(g => totalFiles += g.paths.length);
-
+            function updateStatsAndUI() {
+                const checkedCount = checkedSet.size;   // O(1)
                 statsDisplay.textContent = `${groups.length} 个文件组 · ${totalFiles} 个文件`;
                 selectedCountSpan.textContent = `☑ 已选 ${checkedCount} 个文件`;
                 deleteBtn.disabled = (checkedCount === 0);
@@ -630,6 +654,8 @@
                         render();
                     } else {
                         showToast(`❌ 删除失败: ${data.message || '未知错误'}`);
+                        // 删除失败：取消这些路径的选中
+                        uncheckPaths(filePaths);
                     }
                 })
                 .catch(err => {
@@ -641,35 +667,42 @@
                         render();
                     } else {
                         showToast(`❌ 请求失败: ${err.message}`);
+                        // 删除失败：取消这些路径的选中
+                        uncheckPaths(filePaths);
                     }
                 });
             }
 
+            // 取消一组路径的选中（用于删除失败后重置状态）
+            function uncheckPaths(paths) {
+                paths.forEach(p => checkedSet.delete(p));
+                render();
+            }
+
             // ----- 执行 rm 删除 (底部按钮) -----
             function executeRmDelete() {
-                const selectedPaths = [];
-                for (let [path, checked] of checkedState) {
-                    if (checked) selectedPaths.push(path);
-                }
+                const selectedPaths = [...checkedSet];
 
                 if (selectedPaths.length === 0) {
                     showToast('没有选中任何文件');
                     return;
                 }
 
-                if (confirm(`确定要删除选中的 ${selectedPaths.length} 个文件吗？`)) {
+                if (confirmDelete(selectedPaths.length)) {
                     executeDelete(selectedPaths);
                 }
             }
 
-            // 从 groups 和 checkedState 中移除已删除路径
+            // 从 groups 和 checkedSet 中移除已删除路径，并同步 totalFiles
             function removeDeletedPaths(deletedPaths) {
                 const deletedSet = new Set(deletedPaths);
+                let removedCount = 0;
                 for (let i = groups.length - 1; i >= 0; i--) {
                     const group = groups[i];
                     group.paths = group.paths.filter(p => {
                         if (deletedSet.has(p)) {
-                            checkedState.delete(p);
+                            checkedSet.delete(p);
+                            removedCount++;
                             return false;
                         }
                         return true;
@@ -678,17 +711,18 @@
                         groups.splice(i, 1);
                     }
                 }
+                totalFiles -= removedCount;
             }
 
             // ----- 工具函数 -----
+            const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
             function escapeHtml(unsafe) {
-                return unsafe.replace(/[&<>"]/g, function(m) {
-                    if (m === '&') return '&amp;';
-                    if (m === '<') return '&lt;';
-                    if (m === '>') return '&gt;';
-                    if (m === '"') return '&quot;';
-                    return m;
-                });
+                return unsafe.replace(/[&<>"]/g, m => HTML_ESCAPES[m]);
+            }
+
+            // 统一的删除确认弹窗
+            function confirmDelete(count) {
+                return confirm(`确定要删除选中的 ${count} 个文件吗？`);
             }
 
             let toastTimer = null;
@@ -723,7 +757,8 @@
             // ----- 清空数据 -----
             function clearData() {
                 groups = [];
-                checkedState.clear();
+                checkedSet.clear();
+                totalFiles = 0;
                 fileNameDisplay.textContent = '未上传';
                 render();
                 showToast('已清空数据');
@@ -740,6 +775,10 @@
             clearFileBtn.addEventListener('click', clearData);
 
             // 拖拽上传
+            function resetDragStyle() {
+                uploadArea.style.borderColor = '#cdd9ed';
+                uploadArea.style.background = '#f8faff';
+            }
             uploadArea.addEventListener('dragover', function(e) {
                 e.preventDefault();
                 this.style.borderColor = '#2563eb';
@@ -747,13 +786,11 @@
             });
             uploadArea.addEventListener('dragleave', function(e) {
                 e.preventDefault();
-                this.style.borderColor = '#cdd9ed';
-                this.style.background = '#f8faff';
+                resetDragStyle();
             });
             uploadArea.addEventListener('drop', function(e) {
                 e.preventDefault();
-                this.style.borderColor = '#cdd9ed';
-                this.style.background = '#f8faff';
+                resetDragStyle();
                 const files = e.dataTransfer.files;
                 if (files && files.length > 0) {
                     handleFile(files[0]);
@@ -764,6 +801,7 @@
             deleteBtn.addEventListener('click', executeRmDelete);
 
             // ----- 初始化 (空状态) -----
+            bindContainerEvents();
             render();
 
             console.log('💡 删除请求将发送到 /api/delete-files');
